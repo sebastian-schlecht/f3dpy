@@ -1,8 +1,8 @@
 """
 Package of helpers for reading Food3D data. The data itself is stored
 in binary form using compressed numpy arrays. Appropriate files for loading
-are provided below. Please note that we did already do the registration
-online before dumping the frames, accelerometer data has not been captured as
+are provided below. Please note that we already did the registration on-the-fly
+before dumping the frames; accelerometer data has not been captured as
 we did not have access to the sensor via our API at the point of recording.
 
 --------------------------------------------------------------------
@@ -66,7 +66,7 @@ def convert_npy_to_npz(filename):
 
 def transform_depth(depth):
     """
-    Transform the depth into the space of meters
+    Transform the depth into the space of meters and clean invalid values
     """
     depth[depth == np.inf] = 0
     depth[depth == np.nan] = 0

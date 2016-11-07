@@ -35,6 +35,9 @@ import os
 import numpy as np
 import h5py
 import random
+import pickle
+
+np.random.seed(42)
 
 def load(filename):
     """
@@ -75,7 +78,7 @@ def transform_depth(depth):
     return depth / 1000.
 
 
-def _parse_and_build(classes, filename, f):
+def _parse_and_build(classes, filename, f, ratings):
     """
     Parse a given hash of classes, read the files one by one and dump them into the DB as specified by 'filename'
     """
@@ -87,7 +90,9 @@ def _parse_and_build(classes, filename, f):
     tuples = []
     for key in classes:
         for t in classes[key]:
-            tuples.append(t)
+            build = list(t)
+            build.append(key.split("/")[-1])
+            tuples.append(build)
 
     if len(tuples) == 0:
         return
@@ -97,34 +102,55 @@ def _parse_and_build(classes, filename, f):
     # Create db
     file = h5py.File(filename)
 
+    # Prepare ratings
+    agg_rated = {}
+    for key in ratings:
+        agg_rated[key] = np.array(ratings[key]).mean()
+
     images = []
     depths = []
+    class_labels = []
+    bus = []
 
     idx = 0
+
     for t in tuples:
         print "Reading RGBD pair %i out of %i" % (idx, len(tuples))
         idx += 1
         rgb = load(t[0])
-        if rgb is not None:
-            images.append(rgb[np.newaxis,:,::f,::f])
         d = load(t[1])
-        if d is not None:
+        key = t[2]
+        if rgb is not None and d is not None and key is not None:
+            images.append(rgb[np.newaxis,:,::f,::f])
             d = transform_depth(d)
             depths.append(d[np.newaxis,::f,::f])
+            class_labels.append(key)
+            bus.append(agg_rated[key])
 
     images = np.concatenate(images)
     depths = np.concatenate(depths)
+    bus = np.array(bus)
+    class_labels = np.array(class_labels)
 
     file.create_dataset("images", data=images)
     file.create_dataset("depths", data=depths)
+    file.create_dataset("labels", data=class_labels)
+    file.create_dataset("bus", data=bus)
 
     file.close()
+
+def _load_ratings(dataset):
+    r_file = dataset + "/ratings/results.pkl"
+    ratings = pickle.load(open(r_file, "rb"))
+    return ratings
+
 
 
 def get_files(dataset):
     """
     Get files by reading their names from the folders
     """
+    dataset += "/data/"
     # Get all subdirectories
     subdirs = [os.path.join(dataset,o) for o in os.listdir(dataset) if os.path.isdir(os.path.join(dataset,o))]
 
@@ -157,9 +183,12 @@ def sample(dataset, to):
         img.save(to + "/" + cname + ".jpg")
 
 
-def build_db(dataset, target, f, split=0.7):
+def build_db(dataset, target, f=1, split=0.7):
     """
     Parse files and write to HDF5 DBs
+    :param dataset: Dataset location (root folder)
+    :param target: Target file prefix
+    :param f: Downsample factor (int)
     """
     classes = get_files(dataset)
     # Partition DB
@@ -180,5 +209,6 @@ def build_db(dataset, target, f, split=0.7):
             val[element[0]] = element[1]
         idx += 1.
 
-    _parse_and_build(train, "%s-train.h5" % target, f)
-    _parse_and_build(val, "%s-val.h5" % target, f)
+    ratings = _load_ratings(dataset=dataset)
+    _parse_and_build(train, "%s-train.h5" % target, f, ratings)
+    _parse_and_build(val, "%s-val.h5" % target, f, ratings)

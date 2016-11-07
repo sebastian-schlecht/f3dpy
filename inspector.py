@@ -26,6 +26,8 @@ OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
 import matplotlib.pyplot as plt
+import matplotlib.mlab as mlab
+
 import numpy as np
 import sys
 import os
@@ -59,14 +61,37 @@ def get_current_pair():
 def render():
     ax1.cla()
     ax2.cla()
+    ax3.cla()
+    ax4.cla()
+    ax5.cla()
+    ax6.cla()
+
     rgb, depth = get_current_pair()
     rgb = rgb.transpose((1,2,0))
     depth = transform_depth(depth)
-    ax1.imshow(rgb)
-    ax2.imshow(depth)
+    gray = np.dot(rgb[...,:3], [0.299, 0.587, 0.114])
+    dx = np.diff(gray, axis=1)[1:,:] # remove the first row
+    dy = np.diff(gray, axis=0)[:,1:] # remove the first column
+    dnorm = np.sqrt(dx**2 + dy**2)
+    sharpness = np.average(dnorm)
 
-    ax1.set_title("Current class: %s\nFile-Id: %s" % (current_key, ordered_files[current_key][pair_idx][0].replace("_bgr.npz", "")))
-    ax2.set_title("Max/Min Depth: %f/%f" % (depth.max(), depth.min()))
+    ax1.imshow(rgb)
+    ax1.set_title("RGB")
+
+    ax4.imshow(-gray, cmap=plt.get_cmap('Greys'))
+    ax4.set_title("Grayscale")
+
+    ax2.imshow(depth, cmap=plt.get_cmap('Greys'))
+    ax2.set_title("Depth (Greyscale)")
+
+    ax5.imshow(depth)
+    ax5.set_title("Depth (Jet)")
+
+    text =  "Relative sharpness: %f\n" % (sharpness)
+    text += "Current class: %s\n" % current_key
+    text += "File-Id: %s\n" % ordered_files[current_key][pair_idx][0].replace("_bgr.npz", "")
+    ax3.text(0, 0, text, fontsize=10, transform = ax3.transAxes)
+    ax6.hist(depth.flatten(), 150, facecolor='green')
 
     fig.canvas.draw()
 
@@ -138,9 +163,9 @@ def press(event):
         next_image()
     elif event.key == 'left':
         previous_image()
-    elif event.key == 'j':
+    elif event.key == 'down':
         next_class()
-    elif event.key == 'h':
+    elif event.key == 'up':
         previous_class()
     elif event.key == 'd':
         delete()
@@ -149,7 +174,7 @@ def press(event):
 
     render()
 
-fig, (ax1, ax2) = plt.subplots(1,2)
+fig, ((ax1, ax2, ax3), (ax4, ax5, ax6)) = plt.subplots(2,3)
 
 fig.canvas.mpl_connect('key_press_event', press)
 render()
